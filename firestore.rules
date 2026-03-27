@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Prototype rules: allow all for the microservice demo.
+    // In production, implement strict auth checks.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

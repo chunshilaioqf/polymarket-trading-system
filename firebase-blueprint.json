@@ -1,0 +1,50 @@
+{
+  "entities": {
+    "Account": {
+      "title": "Account",
+      "description": "Polymarket trading account credentials",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "privateKey": { "type": "string" },
+        "creds": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string" },
+            "secret": { "type": "string" },
+            "passphrase": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "address", "privateKey", "creds", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Trading order",
+      "type": "object",
+      "properties": {
+        "accountId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "market": { "type": "string" },
+        "side": { "type": "string" },
+        "price": { "type": "number" },
+        "size": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["accountId", "orderId", "market", "side", "price", "size", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/Account" },
+      "description": "Stores Polymarket accounts"
+    },
+    "orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Stores trading orders"
+    }
+  }
+}
