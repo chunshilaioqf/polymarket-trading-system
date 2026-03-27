@@ -1,0 +1,5 @@
+{
+  "name": "Polymarket Trading Microservice",
+  "description": "An enterprise-grade Polymarket automated trading platform featuring account isolation, state synchronization, and real-time monitoring.",
+  "requestFramePermissions": []
+}
