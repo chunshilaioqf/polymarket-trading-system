@@ -24,7 +24,9 @@ export function getClobClient(
       key,
       secret,
       passphrase,
-    }
+    },
+    0, // signatureType: EOA
+    wallet.address // funder
   );
 
   clients.set(accountId, client);
