@@ -81,8 +81,20 @@ const translations = {
 };
 
 export default function App() {
-  const [lang, setLang] = useState<'en' | 'zh'>('en');
-  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('system');
+  const [lang, setLang] = useState<'en' | 'zh'>(() => {
+    return (localStorage.getItem('lang') as 'en' | 'zh') || 'en';
+  });
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
+    return (localStorage.getItem('theme') as 'dark' | 'light' | 'system') || 'system';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('lang', lang);
+  }, [lang]);
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+  }, [theme]);
   const t = translations[lang];
 
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -102,14 +114,25 @@ export default function App() {
   const [batchOrders, setBatchOrders] = useState([{ market: '', side: 'BUY', price: 0.5, size: 100, tickSize: '0.001', negRisk: false }]);
 
   useEffect(() => {
-    // Theme application
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
+    
+    const applyTheme = () => {
+      root.classList.remove('light', 'dark');
+      if (theme === 'system') {
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        root.classList.add(systemTheme);
+      } else {
+        root.classList.add(theme);
+      }
+    };
+
+    applyTheme();
+
     if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => applyTheme();
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [theme]);
 
