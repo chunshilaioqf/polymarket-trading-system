@@ -9,7 +9,9 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --target=node18 --outfile=dist/server.cjs --external:express --external:vite --external:cors --external:firebase --external:@polymarket/clob-client --external:ethers",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "local": "bash scripts/local.sh",
+    "prod": "bash scripts/prod.sh"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

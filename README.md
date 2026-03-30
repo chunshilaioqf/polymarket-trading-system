@@ -5,9 +5,11 @@ PolyMicro is a high-performance, scalable, and maintainable enterprise-grade Pol
 ## Features
 
 - **Multi-Account Management**: Securely add and manage multiple Polymarket accounts. The system automatically derives wallet addresses and CLOB API credentials from your private key.
-- **Real-time Dashboard**: Monitor active accounts, open orders, and system logs in real-time.
-- **Batch Order Placement**: Place multiple limit orders simultaneously or execute quick market orders.
-- **Market Explorer**: Browse and search active markets directly from the Polymarket Gamma API. Select a market to automatically populate the trading form with the correct `tokenID`, `tickSize`, and `negRisk`.
+- **Real-time Dashboard**: Monitor active accounts, open orders, and system logs in real-time. View derived wallet addresses with a convenient one-click copy button for easy funding.
+- **Dual Database Support**: Flexible database architecture supporting both **Firebase Firestore** and **MongoDB**. Easily switch between them using environment variables.
+- **Advanced Market Explorer**: Browse and search active markets locally, with an online search fallback directly querying the Polymarket Gamma API.
+- **Real-time Order Book & Market Details**: View live order books (bids/asks) powered by a robust backend WebSocket proxy. Market details include the full question, description, and end date.
+- **Smart Quick Trade**: Place Market or Limit orders, and execute batch orders. Click on any price in the live order book to automatically populate the price field in your trade form.
 - **Customizable UI**: Supports English and Chinese languages, along with Light, Dark, and System-following themes.
 - **Secure Architecture**: Private keys are handled securely and never exposed in API responses.
 
@@ -15,15 +17,16 @@ PolyMicro is a high-performance, scalable, and maintainable enterprise-grade Pol
 
 - **Frontend**: React 19, Vite, Tailwind CSS, Lucide React
 - **Backend**: Node.js, Express.js
-- **Database**: Firebase Firestore (Real-time sync & persistence)
+- **Database**: MongoDB (via Mongoose) & Firebase Firestore
 - **SDK**: `@polymarket/clob-client`, `ethers`
+- **Real-time**: Native WebSockets (Frontend) & `ws` (Backend Proxy)
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js (v18+)
-- Firebase Project (Firestore enabled)
+- MongoDB instance OR Firebase Project (Firestore enabled)
 - Polymarket Account (Private Key)
 
 ### Installation
@@ -33,7 +36,17 @@ PolyMicro is a high-performance, scalable, and maintainable enterprise-grade Pol
    npm install
    ```
 
-2. Set up your environment variables. Ensure you have your Firebase configuration and Gemini API key (if applicable) set up in your `.env` or `firebase-applet-config.json` file.
+2. Set up your environment variables by copying `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+   Configure your database preference:
+   ```env
+   # Options: firebase, mongodb
+   DATABASE_TYPE=mongodb
+   # Required if DATABASE_TYPE=mongodb
+   MONGODB_URI=mongodb://localhost:27017/polymarket-bot
+   ```
 
 3. Start the development server:
    ```bash
@@ -49,9 +62,9 @@ PolyMicro is a high-performance, scalable, and maintainable enterprise-grade Pol
 ## Usage
 
 1. **Add an Account**: Navigate to the "Accounts" tab. Click "Add Account", provide a name and your wallet's private key. The system will automatically derive your Polymarket CLOB API credentials.
-2. **Find a Market**: Go to the "Markets" tab to browse active markets. Click "Trade" on a market to pre-fill the Quick Trade form.
-3. **Place Orders**: In the "Dashboard" tab, use the Quick Trade section to place Market or Limit orders. You can add multiple rows for batch limit orders.
-4. **Monitor**: View your open orders and real-time system logs in their respective sections.
+2. **Find a Market**: Go to the "Markets" tab to browse active markets or use the online search. Click "Trade" on a market to pre-fill the Quick Trade form.
+3. **Analyze & Trade**: In the "Dashboard" tab, review the selected market's details and live order book. Click on any bid/ask price to auto-fill your order price, then place your Market or Limit orders.
+4. **Monitor**: View your open orders, active accounts (with copyable wallet addresses), and real-time system logs in their respective sections.
 
 ## Disclaimer
 
