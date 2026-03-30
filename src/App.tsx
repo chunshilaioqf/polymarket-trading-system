@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Wallet, BarChart3, Settings, Plus, Trash2, Terminal, Search, Globe, Moon, Sun, Monitor } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import { db } from './firebase';
+import { Activity, Wallet, BarChart3, Settings, Plus, Trash2, Terminal, Search, Globe, Moon, Sun, Monitor, Copy, Check } from 'lucide-react';
 
 const translations = {
   en: {
@@ -130,6 +128,7 @@ export default function App() {
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
 
   // Form state
   const [newAccount, setNewAccount] = useState({ name: '', privateKey: '' });
@@ -143,6 +142,21 @@ export default function App() {
     // Subscribe to market when the first batch order market changes
     const marketId = batchOrders[0].market;
     if (marketId && marketId.length > 10) {
+      // Fetch market metadata
+      fetch(`https://gamma-api.polymarket.com/markets/${marketId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && !data.error) {
+            setMarketDetails((prev: any) => ({
+              ...prev,
+              question: data.question,
+              description: data.description,
+              endDate: data.endDate
+            }));
+          }
+        })
+        .catch(err => console.error('Failed to fetch market metadata', err));
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${protocol}//${window.location.host}/ws/market`);
       ws.onopen = () => {
@@ -224,24 +238,49 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    const unsubscribeAccounts = onSnapshot(collection(db, 'accounts'), (snapshot) => {
-      setAccounts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const logsQuery = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(50));
-    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubscribeAccounts();
-      unsubscribeOrders();
-      unsubscribeLogs();
+    const fetchAccounts = async () => {
+      try {
+        const res = await fetch('/api/accounts');
+        const data = await res.json();
+        setAccounts(data);
+      } catch (err) {
+        console.error('Failed to fetch accounts', err);
+      }
     };
+
+    const fetchOrders = async () => {
+      try {
+        const res = await fetch('/api/orders');
+        const data = await res.json();
+        setOrders(data);
+      } catch (err) {
+        console.error('Failed to fetch orders', err);
+      }
+    };
+
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch('/api/logs');
+        const data = await res.json();
+        setLogs(data);
+      } catch (err) {
+        console.error('Failed to fetch logs', err);
+      }
+    };
+
+    // Initial fetch
+    fetchAccounts();
+    fetchOrders();
+    fetchLogs();
+
+    // Poll every 3 seconds
+    const interval = setInterval(() => {
+      fetchAccounts();
+      fetchOrders();
+      fetchLogs();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -407,6 +446,39 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Active Accounts List */}
+              {accounts.length > 0 && (
+                <div className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6">
+                  <h3 className="text-lg font-medium mb-4">{t.activeAccounts}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {accounts.map(account => (
+                      <div key={account.id} className="flex items-center gap-3 p-4 bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-lg">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                          <Wallet className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-sm truncate">{account.name}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-xs text-neutral-500 font-mono truncate">{account.address}</p>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(account.address);
+                                setCopiedAddress(account.address);
+                                setTimeout(() => setCopiedAddress(null), 2000);
+                              }}
+                              className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors shrink-0"
+                              title="Copy Address"
+                            >
+                              {copiedAddress === account.address ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Quick Actions */}
               <div className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6">
                 <div className="flex justify-between items-center mb-4">
@@ -471,6 +543,16 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  
+                  {marketDetails.question && (
+                    <div className="mb-6">
+                      <h4 className="font-medium text-neutral-900 dark:text-white mb-1">{marketDetails.question}</h4>
+                      {marketDetails.description && (
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400 line-clamp-3">{marketDetails.description}</p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <h4 className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">{t.orderBookBids}</h4>
@@ -480,7 +562,15 @@ export default function App() {
                           <span>{t.size}</span>
                         </div>
                         {marketDetails.bids && marketDetails.bids.slice(0, 5).map((bid: any, i: number) => (
-                          <div key={i} className="flex justify-between text-sm">
+                          <div 
+                            key={i} 
+                            className="flex justify-between text-sm cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-800 px-1 rounded transition-colors"
+                            onClick={() => {
+                              const newOrders = [...batchOrders];
+                              newOrders[newOrders.length - 1].price = Number(bid.price);
+                              setBatchOrders(newOrders);
+                            }}
+                          >
                             <span className="text-green-600 dark:text-green-400">{bid.price}</span>
                             <span>{bid.size}</span>
                           </div>
@@ -498,7 +588,15 @@ export default function App() {
                           <span>{t.size}</span>
                         </div>
                         {marketDetails.asks && marketDetails.asks.slice(0, 5).map((ask: any, i: number) => (
-                          <div key={i} className="flex justify-between text-sm">
+                          <div 
+                            key={i} 
+                            className="flex justify-between text-sm cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-800 px-1 rounded transition-colors"
+                            onClick={() => {
+                              const newOrders = [...batchOrders];
+                              newOrders[newOrders.length - 1].price = Number(ask.price);
+                              setBatchOrders(newOrders);
+                            }}
+                          >
                             <span className="text-red-600 dark:text-red-400">{ask.price}</span>
                             <span>{ask.size}</span>
                           </div>
@@ -672,7 +770,20 @@ export default function App() {
                       </div>
                       <div>
                         <h4 className="font-medium">{account.name}</h4>
-                        <p className="text-xs text-neutral-500 font-mono">{account.address}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-neutral-500 font-mono">{account.address}</p>
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(account.address);
+                              setCopiedAddress(account.address);
+                              setTimeout(() => setCopiedAddress(null), 2000);
+                            }}
+                            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+                            title="Copy Address"
+                          >
+                            {copiedAddress === account.address ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="flex justify-between items-center text-sm border-t border-neutral-200 dark:border-neutral-800 pt-4">

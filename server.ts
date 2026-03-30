@@ -2,14 +2,19 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import cors from 'cors';
-import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
-import { db } from './src/firebase';
+import { initDb, getDb } from './src/server/db';
 import { getClobClient, removeClobClient } from './src/server/polymarket';
 import { ethers } from 'ethers';
 import { ClobClient, Side, OrderType } from '@polymarket/clob-client';
 import { WebSocketServer, WebSocket } from 'ws';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 async function startServer() {
+  await initDb();
+  const db = getDb();
+  
   const app = express();
   const PORT = 3000;
 
@@ -24,8 +29,7 @@ async function startServer() {
   // API: Accounts
   app.get('/api/accounts', async (req, res) => {
     try {
-      const snapshot = await getDocs(collection(db, 'accounts'));
-      const accounts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const accounts = await db.getAccounts();
       // Hide private keys in response
       const safeAccounts = accounts.map((a: any) => ({
         id: a.id,
@@ -53,22 +57,23 @@ async function startServer() {
       const creds = await tempClient.createOrDeriveApiKey();
 
       const accountData = {
+        id: accountId,
         name,
         address,
         privateKey,
         creds,
         createdAt: Date.now(),
       };
-      await setDoc(doc(db, 'accounts', accountId), accountData);
+      await db.addAccount(accountData);
       
       // Log the action
-      await setDoc(doc(db, 'logs', `log_${Date.now()}`), {
+      await db.addLog({
         timestamp: Date.now(),
         type: 'info',
         message: `Account added: ${name} (${address})`
       });
 
-      res.json({ id: accountId, ...accountData });
+      res.json(accountData);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -76,7 +81,7 @@ async function startServer() {
 
   app.delete('/api/accounts/:id', async (req, res) => {
     try {
-      await deleteDoc(doc(db, 'accounts', req.params.id));
+      await db.deleteAccount(req.params.id);
       removeClobClient(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
@@ -90,12 +95,11 @@ async function startServer() {
       const { accountId, orders } = req.body;
       
       // Get account from DB
-      const accountDoc = await getDoc(doc(db, 'accounts', accountId));
-      if (!accountDoc.exists()) {
+      const account = await db.getAccount(accountId);
+      if (!account) {
         return res.status(404).json({ error: 'Account not found' });
       }
       
-      const account = accountDoc.data();
       const client = getClobClient(
         accountId,
         account.privateKey,
@@ -156,6 +160,7 @@ async function startServer() {
         }
         
         const orderData = {
+          id: orderId,
           accountId,
           orderId,
           market,
@@ -168,11 +173,11 @@ async function startServer() {
           createdAt: Date.now(),
         };
         
-        await setDoc(doc(db, 'orders', orderId), orderData);
+        await db.addOrder(orderData);
         results.push(orderData);
       }
 
-      await setDoc(doc(db, 'logs', `log_${Date.now()}`), {
+      await db.addLog({
         timestamp: Date.now(),
         type: 'info',
         message: `Placed ${orders.length} orders for account ${account.name}`
@@ -186,9 +191,17 @@ async function startServer() {
 
   app.get('/api/orders', async (req, res) => {
     try {
-      const snapshot = await getDocs(collection(db, 'orders'));
-      const orders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const orders = await db.getOrders();
       res.json(orders);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/logs', async (req, res) => {
+    try {
+      const logs = await db.getLogs();
+      res.json(logs);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
