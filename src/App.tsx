@@ -40,6 +40,18 @@ const translations = {
     orderType: 'Order Type',
     market: 'Market',
     limit: 'Limit',
+    marketDetails: 'Market Details',
+    currentPrice: 'Current Price',
+    orderBookBids: 'Order Book (Bids)',
+    orderBookAsks: 'Order Book (Asks)',
+    noBids: 'No bids',
+    noAsks: 'No asks',
+    noLocalMarkets: 'No local markets found',
+    noLocalMarketsDesc: 'We couldn\'t find any markets matching "{query}" in the local index. You can try searching online via the Polymarket API.',
+    searching: 'Searching...',
+    searchOnline: 'Search Online',
+    active: 'Active',
+    trade: 'Trade',
   },
   zh: {
     dashboard: '仪表盘',
@@ -77,6 +89,18 @@ const translations = {
     orderType: '订单类型',
     market: '市价',
     limit: '限价',
+    marketDetails: '市场详情',
+    currentPrice: '当前价格',
+    orderBookBids: '订单薄 (买盘)',
+    orderBookAsks: '订单薄 (卖盘)',
+    noBids: '暂无买单',
+    noAsks: '暂无卖单',
+    noLocalMarkets: '未找到本地市场',
+    noLocalMarketsDesc: '在本地索引中未找到与 "{query}" 匹配的市场。您可以尝试通过 Polymarket API 在线搜索。',
+    searching: '搜索中...',
+    searchOnline: '在线搜索',
+    active: '活跃',
+    trade: '交易',
   }
 };
 
@@ -102,6 +126,7 @@ export default function App() {
   const [logs, setLogs] = useState<any[]>([]);
   const [markets, setMarkets] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchingOnline, setIsSearchingOnline] = useState(false);
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isAddingAccount, setIsAddingAccount] = useState(false);
@@ -112,6 +137,68 @@ export default function App() {
   // Trade state
   const [orderType, setOrderType] = useState<'market' | 'limit'>('limit');
   const [batchOrders, setBatchOrders] = useState([{ market: '', side: 'BUY', price: 0.5, size: 100, tickSize: '0.001', negRisk: false }]);
+  const [marketDetails, setMarketDetails] = useState<any>(null);
+
+  useEffect(() => {
+    // Subscribe to market when the first batch order market changes
+    const marketId = batchOrders[0].market;
+    if (marketId && marketId.length > 10) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/market`);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          assets_ids: [marketId],
+          type: "market"
+        }));
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data) && data.length > 0) {
+            const msg = data[0];
+            if (msg.asset_id === marketId) {
+              setMarketDetails((prev: any) => {
+                const newDetails = { ...prev };
+                if (msg.price !== undefined) newDetails.price = msg.price;
+                if (msg.bids) newDetails.bids = msg.bids;
+                if (msg.asks) newDetails.asks = msg.asks;
+                return newDetails;
+              });
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      };
+      
+      return () => ws.close();
+    } else {
+      setMarketDetails(null);
+    }
+  }, [batchOrders[0].market]);
+
+  const handleOnlineSearch = async () => {
+    if (!searchQuery) return;
+    setIsSearchingOnline(true);
+    try {
+      const res = await fetch(`/api/markets/search?q=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMarkets(data);
+      } else if (data && Array.isArray(data.events)) {
+        setMarkets(data.events);
+      } else if (data && Array.isArray(data.data)) {
+        setMarkets(data.data);
+      } else {
+        setMarkets(data || []);
+      }
+    } catch (err) {
+      console.error('Failed to search markets online', err);
+    } finally {
+      setIsSearchingOnline(false);
+    }
+  };
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -373,6 +460,58 @@ export default function App() {
                 </form>
               </div>
 
+              {/* Market Details */}
+              {marketDetails && (
+                <div className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">{t.marketDetails}</h3>
+                    {marketDetails.price !== undefined && (
+                      <div className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                        {t.currentPrice}: <span className="text-neutral-900 dark:text-white">${marketDetails.price}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">{t.orderBookBids}</h4>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-neutral-400 mb-1">
+                          <span>{t.price}</span>
+                          <span>{t.size}</span>
+                        </div>
+                        {marketDetails.bids && marketDetails.bids.slice(0, 5).map((bid: any, i: number) => (
+                          <div key={i} className="flex justify-between text-sm">
+                            <span className="text-green-600 dark:text-green-400">{bid.price}</span>
+                            <span>{bid.size}</span>
+                          </div>
+                        ))}
+                        {(!marketDetails.bids || marketDetails.bids.length === 0) && (
+                          <div className="text-sm text-neutral-500 text-center py-2">{t.noBids}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">{t.orderBookAsks}</h4>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-neutral-400 mb-1">
+                          <span>{t.price}</span>
+                          <span>{t.size}</span>
+                        </div>
+                        {marketDetails.asks && marketDetails.asks.slice(0, 5).map((ask: any, i: number) => (
+                          <div key={i} className="flex justify-between text-sm">
+                            <span className="text-red-600 dark:text-red-400">{ask.price}</span>
+                            <span>{ask.size}</span>
+                          </div>
+                        ))}
+                        {(!marketDetails.asks || marketDetails.asks.length === 0) && (
+                          <div className="text-sm text-neutral-500 text-center py-2">{t.noAsks}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Recent Orders */}
               <div className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden">
                 <div className="p-6 border-b border-neutral-200 dark:border-neutral-800">
@@ -436,21 +575,48 @@ export default function App() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredMarkets.slice(0, 24).map((market: any) => (
-                  <div key={market.id} className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 flex flex-col">
-                    <h4 className="font-medium text-sm line-clamp-2 mb-2">{market.question || market.title}</h4>
-                    <p className="text-xs text-neutral-500 font-mono mb-4 break-all">{market.id}</p>
-                    <div className="mt-auto pt-4 border-t border-neutral-200 dark:border-neutral-800 flex justify-between items-center">
-                      <span className="text-xs font-medium text-green-600 dark:text-green-400">Active</span>
-                      <button 
-                        onClick={() => selectMarketForTrade(market)}
-                        className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-500 transition-colors"
-                      >
-                        Trade
-                      </button>
+                {filteredMarkets.length > 0 ? (
+                  filteredMarkets.slice(0, 24).map((market: any) => (
+                    <div key={market.id} className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 flex flex-col">
+                      <h4 className="font-medium text-sm line-clamp-2 mb-2">{market.question || market.title}</h4>
+                      <p className="text-xs text-neutral-500 font-mono mb-4 break-all">{market.id}</p>
+                      <div className="mt-auto pt-4 border-t border-neutral-200 dark:border-neutral-800 flex justify-between items-center">
+                        <span className="text-xs font-medium text-green-600 dark:text-green-400">{t.active}</span>
+                        <button 
+                          onClick={() => selectMarketForTrade(market)}
+                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-500 transition-colors"
+                        >
+                          {t.trade}
+                        </button>
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                    <Globe className="w-12 h-12 text-neutral-300 dark:text-neutral-700 mb-4" />
+                    <h3 className="text-lg font-medium text-neutral-900 dark:text-white mb-2">{t.noLocalMarkets}</h3>
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-6 max-w-md">
+                      {t.noLocalMarketsDesc.replace('{query}', searchQuery)}
+                    </p>
+                    <button
+                      onClick={handleOnlineSearch}
+                      disabled={isSearchingOnline || !searchQuery}
+                      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSearchingOnline ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          {t.searching}
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4" />
+                          {t.searchOnline}
+                        </>
+                      )}
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           )}
@@ -510,10 +676,10 @@ export default function App() {
                       </div>
                     </div>
                     <div className="flex justify-between items-center text-sm border-t border-neutral-200 dark:border-neutral-800 pt-4">
-                      <span className="text-neutral-500">Status</span>
+                      <span className="text-neutral-500">{t.status}</span>
                       <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                         <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400"></span>
-                        Active
+                        {t.active}
                       </span>
                     </div>
                   </div>

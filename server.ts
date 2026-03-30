@@ -7,6 +7,7 @@ import { db } from './src/firebase';
 import { getClobClient, removeClobClient } from './src/server/polymarket';
 import { ethers } from 'ethers';
 import { ClobClient, Side, OrderType } from '@polymarket/clob-client';
+import { WebSocketServer, WebSocket } from 'ws';
 
 async function startServer() {
   const app = express();
@@ -205,6 +206,21 @@ async function startServer() {
     }
   });
 
+  app.get('/api/markets/search', async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) {
+        return res.json([]);
+      }
+      // Search active markets from Polymarket Gamma API
+      const response = await fetch(`https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&question=${encodeURIComponent(q as string)}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -220,8 +236,69 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // WebSocket Proxy for Polymarket CLOB
+  const wss = new WebSocketServer({ server, path: '/ws/market' });
+
+  wss.on('connection', (ws) => {
+    console.log('Client connected to WebSocket proxy');
+    let polymarketWs: WebSocket | null = null;
+    let isConnected = false;
+    let pendingMessages: string[] = [];
+
+    const connectToPolymarket = () => {
+      polymarketWs = new WebSocket('wss://ws-subscriptions-clob.polymarket.com/ws/market');
+
+      polymarketWs.on('open', () => {
+        console.log('Connected to Polymarket CLOB WebSocket');
+        isConnected = true;
+        // Send any pending messages
+        while (pendingMessages.length > 0) {
+          const msg = pendingMessages.shift();
+          if (msg) polymarketWs?.send(msg);
+        }
+      });
+
+      polymarketWs.on('message', (data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(data.toString());
+        }
+      });
+
+      polymarketWs.on('close', () => {
+        console.log('Polymarket CLOB WebSocket closed');
+        isConnected = false;
+        // Reconnect if client is still connected
+        if (ws.readyState === WebSocket.OPEN) {
+          setTimeout(connectToPolymarket, 1000);
+        }
+      });
+
+      polymarketWs.on('error', (err) => {
+        console.error('Polymarket WS Error:', err);
+      });
+    };
+
+    connectToPolymarket();
+
+    ws.on('message', (message) => {
+      const msgStr = message.toString();
+      if (isConnected && polymarketWs?.readyState === WebSocket.OPEN) {
+        polymarketWs.send(msgStr);
+      } else {
+        pendingMessages.push(msgStr);
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('Client disconnected from WebSocket proxy');
+      if (polymarketWs) {
+        polymarketWs.close();
+      }
+    });
   });
 }
 
